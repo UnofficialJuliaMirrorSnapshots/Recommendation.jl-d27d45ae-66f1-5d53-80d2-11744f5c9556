@@ -1,21 +1,13 @@
 export UserKNN
 
-struct UserKNN <: Recommender
-    da::DataAccessor
-    hyperparams::Parameters
-    sim::AbstractMatrix
-    is_normalized::Bool
-    states::States
-end
-
 """
     UserKNN(
-        da::DataAccessor,
-        hyperparams::Parameters=Parameters(:k => 5),
-        is_normalized::Bool=false
+        data::DataAccessor,
+        k::Int,
+        normalize::Bool=false
     )
 
-[User-based CF using the Pearson correlation](https://dl.acm.org/citation.cfm?id=312682). `k` represents number of neighbors, and `is_normalized` specifies if weighted sum of neighbors' rating is normalized.
+[User-based CF using the Pearson correlation](https://dl.acm.org/citation.cfm?id=312682). `k` represents number of neighbors, and `normalize` specifies if weighted sum of neighbors' rating is normalized.
 
 The technique gives a weight to a user-user pair by the following equation:
 
@@ -34,18 +26,27 @@ where ``\\sigma(t)`` denotes the ``t``-th nearest-neighborhood user. Ultimately,
 
 It should be noted that user-based CF is highly inefficient because gradually increasing massive users and their dynamic tastes require us to frequently recompute the similarities for every pairs of users.
 """
-UserKNN(da::DataAccessor,
-        hyperparams::Parameters=Parameters(:k => 5);
-        is_normalized::Bool=false) = begin
-    n_user = size(da.R, 1)
-    UserKNN(da, hyperparams, zeros(n_user, n_user), is_normalized,
-            States(:is_built => false))
+struct UserKNN <: Recommender
+    data::DataAccessor
+    k::Int
+    sim::AbstractMatrix
+    normalize::Bool
+
+    function UserKNN(data::DataAccessor, k::Int, normalize::Bool)
+        n_user = size(data.R, 1)
+        new(data, k, matrix(n_user, n_user), normalize)
+    end
 end
 
-function build(rec::UserKNN)
+UserKNN(data::DataAccessor, k::Int) = UserKNN(data, k, false)
+UserKNN(data::DataAccessor) = UserKNN(data, 20, false)
+
+isbuilt(recommender::UserKNN) = isfilled(recommender.sim)
+
+function build!(recommender::UserKNN)
     # Pearson correlation
 
-    R = copy(rec.da.R)
+    R = copy(recommender.data.R)
 
     n_row = size(R, 1)
 
@@ -61,31 +62,29 @@ function build(rec::UserKNN)
             denom = sqrt(dot(vi[ij], vi[ij]) * dot(vj[ij], vj[ij]))
 
             c = numer / denom
-            rec.sim[ri, rj] = c
-            if (ri != rj); rec.sim[rj, ri] = c; end # symmetric
+            recommender.sim[ri, rj] = c
+            if (ri != rj); recommender.sim[rj, ri] = c; end # symmetric
         end
     end
-
-    rec.states[:is_built] = true
 end
 
-function predict(rec::UserKNN, u::Int, i::Int)
-    check_build_status(rec)
+function predict(recommender::UserKNN, u::Int, i::Int)
+    check_build_status(recommender)
 
     numer = denom = 0
 
-    pairs = collect(zip(1:size(rec.da.R)[1], rec.sim[u, :]))
+    pairs = collect(zip(1:size(recommender.data.R)[1], recommender.sim[u, :]))
     # closest neighbor is always target user him/herself, so omit him/her
-    ordered_pairs = sort(pairs, by=tuple->last(tuple), rev=true)[2:(rec.hyperparams[:k] + 1)]
+    ordered_pairs = sort(pairs, by=tuple->last(tuple), rev=true)[2:(recommender.k + 1)]
 
     for (u_near, w) in ordered_pairs
-        v_near = rec.da.R[u_near, :]
+        v_near = recommender.data.R[u_near, :]
 
         r = v_near[i]
         if isnan(r); continue; end
 
         r_ = 0
-        if rec.is_normalized
+        if recommender.normalize
             jj = broadcast(!isnan, v_near)
             r_ = mean(v_near[jj])
         end
@@ -95,9 +94,9 @@ function predict(rec::UserKNN, u::Int, i::Int)
     end
 
     pred = (denom == 0) ? 0 : numer / denom
-    if rec.is_normalized
-        ii = broadcast(!isnan, rec.da.R[u, :])
-        pred += mean(rec.da.R[u, ii])
+    if recommender.normalize
+        ii = broadcast(!isnan, recommender.data.R[u, :])
+        pred += mean(recommender.data.R[u, ii])
     end
     pred
 end

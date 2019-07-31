@@ -1,16 +1,9 @@
 export ItemKNN
 
-struct ItemKNN <: Recommender
-    da::DataAccessor
-    hyperparams::Parameters
-    sim::AbstractMatrix
-    states::States
-end
-
 """
     ItemKNN(
-        da::DataAccessor,
-        hyperparams::Parameters=Parameters(:k => 5)
+        data::DataAccessor,
+        k::Int
     )
 
 [Item-based CF](https://dl.acm.org/citation.cfm?id=963776) that provides a way to model item-item concepts by utilizing the similarities of items in the CF paradigm. `k` represents number of neighbors.
@@ -32,19 +25,28 @@ r_{u,i} = \\frac{\\sum^k_{t=1} s_{i,\\tau(t)} \\cdot r_{u,\\tau(t)} }{ \\sum^k_{
 
 In case that the number of items is smaller than users, item-based CF could be a more reasonable choice than the user-based approach.
 """
-ItemKNN(da::DataAccessor,
-        hyperparams::Parameters=Parameters(:k => 5)) = begin
-    n_item = size(da.R, 2)
-    ItemKNN(da, hyperparams, zeros(n_item, n_item), States(:is_built => false))
+struct ItemKNN <: Recommender
+    data::DataAccessor
+    k::Int
+    sim::AbstractMatrix
+
+    function ItemKNN(data::DataAccessor, k::Int)
+        n_item = size(data.R, 2)
+        new(data, k, matrix(n_item, n_item))
+    end
 end
 
-function build(rec::ItemKNN; is_adjusted_cosine::Bool=false)
+ItemKNN(data::DataAccessor) = ItemKNN(data, 5)
+
+isbuilt(recommender::ItemKNN) = isfilled(recommender.sim)
+
+function build!(recommender::ItemKNN; adjusted_cosine::Bool=false)
     # cosine similarity
 
-    R = copy(rec.da.R)
+    R = copy(recommender.data.R)
     n_row, n_col = size(R)
 
-    if is_adjusted_cosine
+    if adjusted_cosine
         # subtract mean
         for ri in 1:n_row
             indices = broadcast(!isnan, R[ri, :])
@@ -65,28 +67,26 @@ function build(rec::ItemKNN; is_adjusted_cosine::Bool=false)
             denom = norms[ci] * norms[cj]
             s = numer / denom
 
-            rec.sim[ci, cj] = s
-            if (ci != cj); rec.sim[cj, ci] = s; end
+            recommender.sim[ci, cj] = s
+            if (ci != cj); recommender.sim[cj, ci] = s; end
         end
     end
 
     # NaN similarities are converted into zeros
-    rec.sim[isnan.(rec.sim)] .= 0
-
-    rec.states[:is_built] = true
+    recommender.sim[isnan.(recommender.sim)] .= 0
 end
 
-function predict(rec::ItemKNN, u::Int, i::Int)
-    check_build_status(rec)
+function predict(recommender::ItemKNN, u::Int, i::Int)
+    check_build_status(recommender)
 
     numer = denom = 0
 
     # negative similarities are filtered
-    pairs = collect(zip(1:size(rec.da.R)[2], max.(rec.sim[i, :], 0)))
-    ordered_pairs = sort(pairs, by=tuple->last(tuple), rev=true)[1:rec.hyperparams[:k]]
+    pairs = collect(zip(1:size(recommender.data.R)[2], max.(recommender.sim[i, :], 0)))
+    ordered_pairs = sort(pairs, by=tuple->last(tuple), rev=true)[1:recommender.k]
 
     for (j, s) in ordered_pairs
-        r = rec.da.R[u, j]
+        r = recommender.data.R[u, j]
         if isnan(r); continue; end
 
         numer += s * r

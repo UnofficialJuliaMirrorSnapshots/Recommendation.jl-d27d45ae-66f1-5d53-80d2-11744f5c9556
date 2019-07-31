@@ -1,10 +1,15 @@
 # Recommendation.jl
 
-[![Build Status](https://travis-ci.org/takuti/Recommendation.jl.svg?branch=master)](https://travis-ci.org/takuti/Recommendation.jl) [![Recommendation](http://pkg.julialang.org/badges/Recommendation_0.5.svg)](http://pkg.julialang.org/detail/Recommendation) [![Recommendation](http://pkg.julialang.org/badges/Recommendation_0.6.svg)](http://pkg.julialang.org/detail/Recommendation)
+[![Build Status](https://travis-ci.org/takuti/Recommendation.jl.svg?branch=master)](https://travis-ci.org/takuti/Recommendation.jl) 
+[![Coverage Status](https://coveralls.io/repos/github/takuti/Recommendation.jl/badge.svg?branch=master)](https://coveralls.io/github/takuti/Recommendation.jl?branch=master)
+[![](https://img.shields.io/badge/docs-latest-blue.svg)](https://takuti.github.io/Recommendation.jl/latest/)
 
-**Recommendation.jl** is a Julia package for building recommender systems. 
+**Recommendation.jl** is a minimal, customizable Julia package for building recommender systems. Pre-built basic functionalities include:
 
-- [**Documentation**](https://takuti.github.io/Recommendation.jl/latest/)
+- Non-personalized baselines that give unsophisticated, rule-based recommendation.
+- Collaborative filtering on either explicit or implicit user-item matrix.
+- Content-based filtering by using the TF-IDF weighting technique.
+- Evaluation based on a variety of rating and ranking metrics, with easy-to-use N-fold cross validation executor.
 
 ## Installation
 
@@ -29,18 +34,17 @@ First of all, you need to create a data accessor from a matrix:
 ```julia
 using SparseArrays
 
-da = DataAccessor(sparse([1 0 0; 4 5 0]))
+data = DataAccessor(sparse([1 0 0; 4 5 0]))
 ```
 
 or set of events:
 
 ```julia
-const n_user = 5
-const n_item = 10
+n_user, n_item = 5, 10
 
 events = [Event(1, 2, 1), Event(3, 2, 1), Event(2, 6, 4)]
 
-da = DataAccessor(events, n_user, n_item)
+data = DataAccessor(events, n_user, n_item)
 ```
 
 where `Event()` is a composite type which represents a user-item interaction:
@@ -56,28 +60,35 @@ end
 Next, you can pass the data accessor to an arbitrary recommender as:
 
 ```julia
-recommender = MostPopular(da)
+recommender = MostPopular(data)
 ```
 
 and building a recommendation engine should be easy:
 
 ```julia
-build(recommender)
+build!(recommender)
 ```
 
 Personalized recommenders sometimes require us to specify the hyperparameters:
 
 ```julia
-recommender = MF(da, Parameters(:k => 2))
-build(recommender, learning_rate=15e-4, max_iter=100)
+help?> Recommendation.MF
+  MF(
+      data::DataAccessor,
+      k::Int
+  )
 ```
-
-Once a recommendation engine has been built successfully, top-`k` recommendation for a user `u` with item candidates `candidates` is performed as follows:
 
 ```julia
-u = 4
-k = 2
-candidates = [i for i in 1:n_item] # all items
-
-recommend(recommender, u, k, candidates)
+recommender = MF(data, 2)
+build!(recommender, learning_rate=15e-4, max_iter=100)
 ```
+
+Once a recommendation engine has been built successfully, top-`2` recommendation for a user `4` is performed as follows:
+
+```julia
+# for user#4, pick top-2 from all items
+recommend(recommender, 4, 2, collect(1:n_item))
+```
+
+See [**documentation**](https://takuti.github.io/Recommendation.jl/latest/) for the details.

@@ -4,8 +4,8 @@
 
 This package is registered in [METADATA.jl](https://github.com/JuliaLang/METADATA.jl).
 
-```sh
-Pkg.add("Recommendation")
+```julia
+julia> using Pkg; Pkg.add("Recommendation")
 ```
 
 ## Usage
@@ -21,18 +21,17 @@ First of all, you need to create a data accessor from a matrix:
 ```julia
 using SparseArrays
 
-da = DataAccessor(sparse([1 0 0; 4 5 0]))
+data = DataAccessor(sparse([1 0 0; 4 5 0]))
 ```
 
 or set of events:
 
 ```julia
-const n_user = 5
-const n_item = 10
+n_user, n_item = 5, 10
 
 events = [Event(1, 2, 1), Event(3, 2, 1), Event(2, 6, 4)]
 
-da = DataAccessor(events, n_user, n_item)
+data = DataAccessor(events, n_user, n_item)
 ```
 
 where `Event()` is a composite type which represents a user-item interaction:
@@ -48,28 +47,33 @@ end
 Next, you can pass the data accessor to an arbitrary recommender as:
 
 ```julia
-recommender = MostPopular(da)
+recommender = MostPopular(data)
 ```
 
 and building a recommendation engine should be easy:
 
 ```julia
-build(recommender)
+build!(recommender)
 ```
 
 Personalized recommenders sometimes require us to specify the hyperparameters:
 
 ```julia
-recommender = MF(da, Parameters(:k => 2))
-build(recommender, learning_rate=15e-4, max_iter=100)
+help?> Recommendation.MF
+  MF(
+      data::DataAccessor,
+      k::Int
+  )
 ```
 
-Once a recommendation engine has been built successfully, top-`k` recommendation for a user `u` with item candidates `candidates` is performed as follows:
+```julia
+recommender = MF(data, 2)
+build!(recommender, learning_rate=15e-4, max_iter=100)
+```
+
+Once a recommendation engine has been built successfully, top-`2` recommendation for a user `4` is performed as follows:
 
 ```julia
-u = 4
-k = 2
-candidates = [i for i in 1:n_item] # all items
-
-recommend(recommender, u, k, candidates)
+# for user#4, pick top-2 from all items
+recommend(recommender, 4, 2, collect(1:n_item))
 ```

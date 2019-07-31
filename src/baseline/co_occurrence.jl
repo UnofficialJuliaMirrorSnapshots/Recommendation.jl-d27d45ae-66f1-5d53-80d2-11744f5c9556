@@ -1,43 +1,41 @@
 export CoOccurrence
 
-struct CoOccurrence <: Recommender
-    da::DataAccessor
-    hyperparams::Parameters
-    scores::AbstractVector
-    states::States
-end
-
 """
 
     CoOccurrence(
-        da::DataAccessor,
-        hyperparams::Parameters=Parameters(:i_ref => 1)
+        data::DataAccessor,
+        i_ref::Int
     )
 
 Recommend items which are most frequently co-occurred with a reference item `i_ref`.
 """
-CoOccurrence(da::DataAccessor,
-             hyperparams::Parameters=Parameters(:i_ref => 1)) = begin
-    n_item = size(da.R, 2)
-    CoOccurrence(da, hyperparams, zeros(n_item), States(:is_built => false))
+struct CoOccurrence <: Recommender
+    data::DataAccessor
+    i_ref::Int
+    scores::AbstractVector
+
+    function CoOccurrence(data::DataAccessor, i_ref::Int)
+        n_item = size(data.R, 2)
+        new(data, i_ref, vector(n_item))
+    end
 end
 
-function build(rec::CoOccurrence)
-    n_item = size(rec.da.R, 2)
+isbuilt(recommender::CoOccurrence) = isfilled(recommender.scores)
 
-    v_ref = rec.da.R[:, rec.hyperparams[:i_ref]]
+function build!(recommender::CoOccurrence)
+    n_item = size(recommender.data.R, 2)
+
+    v_ref = recommender.data.R[:, recommender.i_ref]
     c = count(!iszero, v_ref)
 
     for i in 1:n_item
-        v = rec.da.R[:, i]
+        v = recommender.data.R[:, i]
         cc = length(v_ref[(v_ref .> 0) .& (v .> 0)])
-        rec.scores[i] = cc / c * 100.0
+        recommender.scores[i] = cc / c * 100.0
     end
-
-    rec.states[:is_built] = true
 end
 
-function ranking(rec::CoOccurrence, u::Int, i::Int)
-    check_build_status(rec)
-    rec.scores[i]
+function ranking(recommender::CoOccurrence, u::Int, i::Int)
+    check_build_status(recommender)
+    recommender.scores[i]
 end

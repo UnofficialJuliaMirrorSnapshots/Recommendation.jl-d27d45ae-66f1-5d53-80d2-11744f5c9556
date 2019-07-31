@@ -1,15 +1,8 @@
 export TFIDF
 
-struct TFIDF <: Recommender
-    da::DataAccessor # document x attribute
-    tf::AbstractMatrix # 1 x attribute
-    idf::AbstractMatrix # 1 x attribute
-    states::States
-end
-
 """
     TFIDF(
-        da::DataAccessor,
+        data::DataAccessor,
         tf::AbstractMatrix,
         idf::AbstractMatrix
     )
@@ -34,15 +27,19 @@ Finally, each item-term pair is weighted by ``\\mathrm{tf}(t, i) \\cdot \\mathrm
 
 ![tfidf](./assets/images/tfidf.png)
 """
-TFIDF(da::DataAccessor, tf::AbstractMatrix, idf::AbstractMatrix) = begin
-    # instanciate with dummy status (i.e., always true)
-    TFIDF(da, tf, idf, States(:is_built => true))
+struct TFIDF <: Recommender
+    data::DataAccessor # document x attribute
+    tf::AbstractMatrix # 1 x attribute
+    idf::AbstractMatrix # 1 x attribute
+
+    function TFIDF(data::DataAccessor, tf::AbstractMatrix, idf::AbstractMatrix)
+        # instanciate with dummy status (i.e., always true)
+        new(data, tf, idf)
+    end
 end
 
-function predict(rec::TFIDF, u::Int, i::Int)
-    check_build_status(rec)
-
-    uv = rec.da.user_attributes[u]
-    profile = rec.da.R' * uv # attribute x 1
-    ((rec.da.R .* rec.idf) * profile)[i]
+function predict(recommender::TFIDF, u::Int, i::Int)
+    uv = recommender.data.user_attributes[u]
+    profile = recommender.data.R' * uv # attribute x 1
+    ((recommender.data.R .* recommender.idf) * profile)[i]
 end
